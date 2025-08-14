@@ -66,10 +66,110 @@ class SleeperAPI:
             if response.status_code != 200:
                 return {}
             return response.json()
+    
+    async def get_players(self) -> Dict:
+        """Fetch all NFL players data"""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{self.base_url}/players/nfl")
+            if response.status_code != 200:
+                return {}
+            return response.json()
 
 class FantasyAnalytics:
     def __init__(self):
         self.sleeper_api = SleeperAPI()
+        self.players_data = {}
+        self.roster_settings = {}
+    
+    def set_players_data(self, players_data: Dict):
+        """Set the players data for name lookups"""
+        self.players_data = players_data
+    
+    def set_roster_settings(self, roster_settings: Dict):
+        """Set the roster settings for position requirements"""
+        self.roster_settings = roster_settings
+    
+    def get_player_name(self, player_id: str) -> str:
+        """Get player name from player ID"""
+        if player_id in self.players_data:
+            player = self.players_data[player_id]
+            first_name = player.get('first_name', '')
+            last_name = player.get('last_name', '')
+            name = f"{first_name} {last_name}".strip()
+            print(f"      Player lookup: {player_id} -> {name}")
+            return name
+        print(f"      Player not found: {player_id}")
+        return f"Player {player_id}"
+    
+    def get_player_position(self, player_id: str) -> str:
+        """Get player position from player ID"""
+        if player_id in self.players_data:
+            player = self.players_data[player_id]
+            return player.get('position', 'UNK')
+        return 'UNK'
+    
+    def is_valid_position_substitution(self, current_positions: List[str], new_player_pos: str, replaced_player_pos: str) -> bool:
+        """Check if a position substitution is valid according to roster settings"""
+        # Create a copy of current positions
+        test_positions = current_positions.copy()
+        
+        # Remove the replaced player's position
+        if replaced_player_pos in test_positions:
+            test_positions.remove(replaced_player_pos)
+        
+        # Add the new player's position
+        test_positions.append(new_player_pos)
+        
+        # Check if this combination satisfies roster requirements
+        return self._satisfies_roster_requirements(test_positions)
+    
+    def _satisfies_roster_requirements(self, positions: List[str]) -> bool:
+        """Check if a list of positions satisfies the roster requirements"""
+        if not self.roster_settings:
+            return True  # If no settings, assume any combination is valid
+        
+        # Count positions
+        pos_counts = {}
+        for pos in positions:
+            pos_counts[pos] = pos_counts.get(pos, 0) + 1
+        
+        # Check QB requirement
+        qb_required = self.roster_settings.get('qb', 0)
+        if pos_counts.get('QB', 0) != qb_required:
+            return False
+        
+        # Check RB requirement
+        rb_required = self.roster_settings.get('rb', 0)
+        if pos_counts.get('RB', 0) < rb_required:
+            return False
+        
+        # Check WR requirement
+        wr_required = self.roster_settings.get('wr', 0)
+        if pos_counts.get('WR', 0) < wr_required:
+            return False
+        
+        # Check TE requirement
+        te_required = self.roster_settings.get('te', 0)
+        if pos_counts.get('TE', 0) < te_required:
+            return False
+        
+        # Check K requirement
+        k_required = self.roster_settings.get('k', 0)
+        if pos_counts.get('K', 0) != k_required:
+            return False
+        
+        # Check DEF requirement
+        def_required = self.roster_settings.get('def', 0)
+        if pos_counts.get('DEF', 0) != def_required:
+            return False
+        
+        # Check FLEX positions (WR/RB/TE)
+        flex_required = self.roster_settings.get('flex', 0)
+        flex_positions = pos_counts.get('WR', 0) + pos_counts.get('RB', 0) + pos_counts.get('TE', 0)
+        if flex_positions < (rb_required + wr_required + te_required + flex_required):
+            return False
+        
+        return True
     
     def analyze_weekly_performance(self, roster: Dict, matchup: Dict, player_stats: Dict) -> Dict:
         """Analyze a team's weekly performance and suggest optimal lineup"""
@@ -89,8 +189,9 @@ class FantasyAnalytics:
                 if i < len(starters_points):
                     actual_performance.append({
                         'player_id': player_id,
+                        'name': self.get_player_name(player_id),
                         'points': starters_points[i],
-                        'position': self._get_player_position(player_id, player_stats)
+                        'position': self.get_player_position(player_id)
                     })
             
             # Calculate optimal lineup from bench players
@@ -102,30 +203,46 @@ class FantasyAnalytics:
                     points = player_stats[player_id].get('pts_ppr', 0)
                     bench_performance.append({
                         'player_id': player_id,
+                        'name': self.get_player_name(player_id),
                         'points': points,
-                        'position': self._get_player_position(player_id, player_stats)
+                        'position': self.get_player_position(player_id)
                     })
             
             # Sort bench players by points
             bench_performance.sort(key=lambda x: x['points'], reverse=True)
             
-            # Find optimal lineup (replace worst starters with best bench players)
+            # Find optimal lineup with position-aware improvements
             optimal_lineup = actual_performance.copy()
-            if optimal_lineup:  # Only sort if there are players
-                optimal_lineup.sort(key=lambda x: x['points'])
-            
             improvements = []
-            # Only try to make improvements if we have both optimal lineup and bench players
+            
+            # Get current starter positions
+            current_positions = [p['position'] for p in actual_performance]
+            
+            # Try to improve lineup with position-aware substitutions
             if optimal_lineup and len(optimal_lineup) > 0:
+                # Sort starters by points (worst first)
+                optimal_lineup.sort(key=lambda x: x['points'])
+                
                 for bench_player in bench_performance:
-                    if bench_player['points'] > optimal_lineup[0]['points']:
-                        replaced_player = optimal_lineup.pop(0)
-                        optimal_lineup.append(bench_player)
-                        improvements.append({
-                            'replaced': replaced_player,
-                            'with': bench_player,
-                            'point_gain': bench_player['points'] - replaced_player['points']
-                        })
+                    # Find the worst starter that can be replaced
+                    for i, starter in enumerate(optimal_lineup):
+                        # Check if this substitution would be valid positionally
+                        if self.is_valid_position_substitution(current_positions, bench_player['position'], starter['position']):
+                            if bench_player['points'] > starter['points']:
+                                # Make the substitution
+                                replaced_player = optimal_lineup.pop(i)
+                                optimal_lineup.append(bench_player)
+                                
+                                # Update position list
+                                current_positions.remove(replaced_player['position'])
+                                current_positions.append(bench_player['position'])
+                                
+                                improvements.append({
+                                    'replaced': replaced_player,
+                                    'with': bench_player,
+                                    'point_gain': bench_player['points'] - replaced_player['points']
+                                })
+                                break  # Move to next bench player
             
             return {
                 'actual_points': sum(p['points'] for p in actual_performance),
@@ -175,12 +292,24 @@ class FantasyAnalytics:
                     print(f"    No matchup found for roster {user_roster.get('roster_id')} in week {week}")
                     continue
                 
+                # Find opponent's matchup (same matchup_id but different roster_id)
+                opponent_matchup = next((m for m in week_matchups 
+                                       if m.get('matchup_id') == user_matchup.get('matchup_id') 
+                                       and m.get('roster_id') != user_roster.get('roster_id')), None)
+                
+                # Calculate points against from opponent's points
+                points_against = opponent_matchup.get('points', 0) if opponent_matchup else 0
+                
                 # Debug: Check matchup data structure
                 if week == 1:
                     print(f"    Matchup keys: {list(user_matchup.keys())}")
                     print(f"    Starters points from matchup: {user_matchup.get('starters_points', [])[:3]}...")
                     print(f"    Total points: {user_matchup.get('points', 0)}")
-                    print(f"    Points against: {user_matchup.get('points_against', 0)}")
+                    print(f"    Points against: {points_against}")
+                    print(f"    Matchup ID: {user_matchup.get('matchup_id')}")
+                    if opponent_matchup:
+                        print(f"    Opponent roster ID: {opponent_matchup.get('roster_id')}")
+                        print(f"    Opponent points: {opponent_matchup.get('points', 0)}")
                 
                 # Analyze weekly performance
                 try:
@@ -191,13 +320,13 @@ class FantasyAnalytics:
                         'actual_points': weekly_analysis['actual_points'],
                         'optimal_points': weekly_analysis['optimal_points'],
                         'improvements': weekly_analysis['improvements'],
-                        'result': 'W' if user_matchup.get('points', 0) > user_matchup.get('points_against', 0) else 'L'
+                        'result': 'W' if user_matchup.get('points', 0) > points_against else 'L'
                     })
                     
                     total_actual_points += weekly_analysis['actual_points']
                     total_optimal_points += weekly_analysis['optimal_points']
                     
-                    if user_matchup.get('points', 0) > user_matchup.get('points_against', 0):
+                    if user_matchup.get('points', 0) > points_against:
                         wins += 1
                     else:
                         losses += 1
@@ -244,6 +373,31 @@ async def analyze_league(league_id: str = Form(...)):
         
         users = await analytics.sleeper_api.get_users(league_id)
         print(f"Users fetched: {len(users)} users")
+        
+        # Fetch player data for name lookups
+        players_data = await analytics.sleeper_api.get_players()
+        print(f"Players data fetched: {len(players_data)} players")
+        if players_data:
+            sample_player_id = list(players_data.keys())[0]
+            sample_player = players_data[sample_player_id]
+            print(f"Sample player data: {sample_player_id} -> {sample_player.get('first_name', '')} {sample_player.get('last_name', '')}")
+        analytics.set_players_data(players_data)
+        
+        # Extract roster settings from league data
+        roster_settings = {}
+        if 'roster_positions' in league:
+            roster_positions = league['roster_positions']
+            roster_settings = {
+                'qb': roster_positions.count('QB'),
+                'rb': roster_positions.count('RB'),
+                'wr': roster_positions.count('WR'),
+                'te': roster_positions.count('TE'),
+                'k': roster_positions.count('K'),
+                'def': roster_positions.count('DEF'),
+                'flex': roster_positions.count('FLEX')
+            }
+            print(f"Roster settings: {roster_settings}")
+        analytics.set_roster_settings(roster_settings)
         
         # Get current week and season
         current_week = league.get('settings', {}).get('leg', 1)

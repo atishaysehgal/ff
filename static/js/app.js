@@ -1,5 +1,8 @@
 // Fantasy Football Analytics App JavaScript
 
+// Test if JavaScript is loading
+console.log('JavaScript file loaded successfully!');
+
 let leagueData = null;
 let charts = {};
 
@@ -40,6 +43,7 @@ async function analyzeLeague() {
         }
         
         leagueData = await response.json();
+        console.log('Fetch successful! Data received:', leagueData);
         displayResults(leagueData);
         
     } catch (error) {
@@ -52,11 +56,20 @@ async function analyzeLeague() {
 
 // Display the analysis results
 function displayResults(data) {
-    updateLeagueOverview(data);
-    displayManagerCards(data);
-    createCharts(data);
-    displayDetailedAnalysis(data);
-    showResults();
+    try {
+        console.log('Displaying results with data:', data);
+        
+        updateLeagueOverview(data);
+        displayManagerCards(data);
+        createCharts(data);
+        createTrendlineCharts(data);
+        displayDetailedAnalysis(data);
+        showResults();
+    } catch (error) {
+        console.error('Error displaying results:', error);
+        alert('Error in displayResults: ' + error.message);
+        showError('Failed to display results: ' + error.message);
+    }
 }
 
 // Update league overview section
@@ -252,28 +265,461 @@ function createCharts(data) {
             }
         }
     });
+    
+    // Create trendline charts
+    createTrendlineCharts(data);
+}
+
+// Create trendline charts for weekly metrics
+function createTrendlineCharts(data) {
+    try {
+
+        
+        const managerAnalytics = data.manager_analytics;
+        const users = data.users;
+        
+        console.log('Creating trendline charts with data:', { managerAnalytics, users });
+        
+        // Check if we have data
+        if (!managerAnalytics || Object.keys(managerAnalytics).length === 0) {
+            console.error('No manager analytics data found');
+            alert('No manager analytics data found');
+            return;
+        }
+        
+        if (!users || users.length === 0) {
+            console.error('No users data found');
+            alert('No users data found');
+            return;
+        }
+        
+        // Weekly Points Trend Chart
+        createWeeklyPointsTrendChart(managerAnalytics, users);
+        
+        // Optimal vs Actual Points Chart
+        createOptimalVsActualChart(managerAnalytics, users);
+        
+        // Points Lost Per Week Chart
+        createPointsLostPerWeekChart(managerAnalytics, users);
+        
+        // Cumulative Record Chart
+        createCumulativeRecordChart(managerAnalytics, users);
+    } catch (error) {
+        console.error('Error creating trendline charts:', error);
+        alert('Error creating trendline charts: ' + error.message);
+    }
+}
+
+// Weekly Points Trend Chart
+function createWeeklyPointsTrendChart(managerAnalytics, users) {
+
+    
+    console.log('Creating weekly points trend chart');
+    console.log('Manager analytics:', managerAnalytics);
+    console.log('Users:', users);
+    
+    const ctx = document.getElementById('weeklyPointsTrendChart');
+    if (!ctx) {
+        console.error('weeklyPointsTrendChart canvas not found');
+        alert('weeklyPointsTrendChart canvas not found');
+        return;
+    }
+    
+    // Test if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded');
+        alert('Chart.js is not loaded');
+        return;
+    }
+    
+    console.log('Chart.js is available, creating test chart...');
+    alert('Chart.js is available, creating test chart...');
+    
+    // Create a simple test chart first
+    const testChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
+            datasets: [{
+                label: 'Test Data',
+                data: [10, 20, 15, 25, 30],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderWidth: 2,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    console.log('Test chart created successfully');
+    
+            // Get all weeks from the first user's data
+        const firstUser = Object.values(managerAnalytics)[0];
+        console.log('First user:', firstUser);
+        
+        if (!firstUser || !firstUser.season_analysis || !firstUser.season_analysis.weekly_data) {
+            console.error('No weekly data found in first user');
+            alert('No weekly data found in first user');
+            return;
+        }
+        
+        const weeks = firstUser.season_analysis.weekly_data.map(w => w.week);
+        console.log('Weeks:', weeks);
+        alert('Weeks found: ' + weeks.join(', '));
+        
+        const datasets = users.map((user, index) => {
+            const analytics = managerAnalytics[user.user_id];
+            if (!analytics) {
+                console.log('No analytics for user:', user.user_id);
+                return null;
+            }
+            
+            const weeklyData = analytics.season_analysis.weekly_data;
+            const points = weeklyData.map(w => w.actual_points);
+            console.log(`User ${user.display_name} actual points:`, points);
+            alert(`User ${user.display_name} actual points: ${points.join(', ')}`);
+        
+        return {
+            label: user.display_name || user.metadata?.team_name || 'Unknown',
+            data: points,
+            borderColor: getColor(index),
+            backgroundColor: getColor(index, 0.1),
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1
+        };
+    }).filter(dataset => dataset !== null);
+    
+    if (window.weeklyPointsTrendChart && typeof window.weeklyPointsTrendChart.destroy === 'function') {
+        window.weeklyPointsTrendChart.destroy();
+    }
+    
+    window.weeklyPointsTrendChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weeks,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Points'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+
+// Optimal vs Actual Points Chart
+function createOptimalVsActualChart(managerAnalytics, users) {
+
+    
+    const ctx = document.getElementById('optimalVsActualChart');
+    if (!ctx) {
+        alert('optimalVsActualChart canvas not found');
+        return;
+    }
+    
+    const firstUser = Object.values(managerAnalytics)[0];
+    if (!firstUser || !firstUser.season_analysis || !firstUser.season_analysis.weekly_data) {
+        alert('No weekly data found in first user for optimal vs actual chart');
+        return;
+    }
+    
+    const weeks = firstUser.season_analysis.weekly_data.map(w => w.week);
+    alert('Optimal vs Actual weeks: ' + weeks.join(', '));
+    
+    const datasets = users.map((user, index) => {
+        const analytics = managerAnalytics[user.user_id];
+        if (!analytics) {
+            alert('No analytics for user: ' + user.user_id);
+            return null;
+        }
+        
+        const weeklyData = analytics.season_analysis.weekly_data;
+        const actualPoints = weeklyData.map(w => w.actual_points);
+        const optimalPoints = weeklyData.map(w => w.optimal_points);
+        
+        alert(`User ${user.display_name} - Actual: ${actualPoints.join(', ')}, Optimal: ${optimalPoints.join(', ')}`);
+        
+        return [
+            {
+                label: `${user.display_name || user.metadata?.team_name || 'Unknown'} - Actual`,
+                data: actualPoints,
+                borderColor: getColor(index),
+                backgroundColor: getColor(index, 0.1),
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1
+            },
+            {
+                label: `${user.display_name || user.metadata?.team_name || 'Unknown'} - Optimal`,
+                data: optimalPoints,
+                borderColor: getColor(index),
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.1
+            }
+        ];
+    }).flat().filter(dataset => dataset !== null);
+    
+    if (window.optimalVsActualChart && typeof window.optimalVsActualChart.destroy === 'function') {
+        window.optimalVsActualChart.destroy();
+    }
+    
+    window.optimalVsActualChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weeks,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Points'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+
+// Points Lost Per Week Chart
+function createPointsLostPerWeekChart(managerAnalytics, users) {
+    const ctx = document.getElementById('pointsLostPerWeekChart').getContext('2d');
+    
+    const firstUser = Object.values(managerAnalytics)[0];
+    const weeks = firstUser ? firstUser.season_analysis.weekly_data.map(w => w.week) : [];
+    
+    const datasets = users.map((user, index) => {
+        const analytics = managerAnalytics[user.user_id];
+        if (!analytics) return null;
+        
+        const weeklyData = analytics.season_analysis.weekly_data;
+        const pointsLost = weeklyData.map(w => w.optimal_points - w.actual_points);
+        
+        return {
+            label: user.display_name || user.metadata?.team_name || 'Unknown',
+            data: pointsLost,
+            borderColor: getColor(index),
+            backgroundColor: getColor(index, 0.1),
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1
+        };
+    }).filter(dataset => dataset !== null);
+    
+    if (window.pointsLostPerWeekChart) {
+        if (window.pointsLostPerWeekChart && typeof window.pointsLostPerWeekChart.destroy === 'function') {
+        window.pointsLostPerWeekChart.destroy();
+    }
+    }
+    
+    window.pointsLostPerWeekChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weeks,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Points Lost'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+
+// Cumulative Record Chart
+function createCumulativeRecordChart(managerAnalytics, users) {
+    const ctx = document.getElementById('cumulativeRecordChart').getContext('2d');
+    
+    const firstUser = Object.values(managerAnalytics)[0];
+    const weeks = firstUser ? firstUser.season_analysis.weekly_data.map(w => w.week) : [];
+    
+    const datasets = users.map((user, index) => {
+        const analytics = managerAnalytics[user.user_id];
+        if (!analytics) return null;
+        
+        const weeklyData = analytics.season_analysis.weekly_data;
+        let cumulativeWins = 0;
+        const cumulativeRecord = weeklyData.map(w => {
+            if (w.result === 'W') cumulativeWins++;
+            return cumulativeWins;
+        });
+        
+        return {
+            label: user.display_name || user.metadata?.team_name || 'Unknown',
+            data: cumulativeRecord,
+            borderColor: getColor(index),
+            backgroundColor: getColor(index, 0.1),
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1
+        };
+    }).filter(dataset => dataset !== null);
+    
+    if (window.cumulativeRecordChart) {
+        if (window.cumulativeRecordChart && typeof window.cumulativeRecordChart.destroy === 'function') {
+        window.cumulativeRecordChart.destroy();
+    }
+    }
+    
+    window.cumulativeRecordChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weeks,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Cumulative Wins'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+
+// Helper function to get colors for charts
+function getColor(index, alpha = 1) {
+    const colors = [
+        `rgba(54, 162, 235, ${alpha})`,
+        `rgba(255, 99, 132, ${alpha})`,
+        `rgba(75, 192, 192, ${alpha})`,
+        `rgba(255, 205, 86, ${alpha})`,
+        `rgba(153, 102, 255, ${alpha})`,
+        `rgba(255, 159, 64, ${alpha})`,
+        `rgba(199, 199, 199, ${alpha})`,
+        `rgba(83, 102, 255, ${alpha})`,
+        `rgba(78, 252, 3, ${alpha})`,
+        `rgba(252, 3, 244, ${alpha})`,
+        `rgba(3, 252, 198, ${alpha})`,
+        `rgba(252, 186, 3, ${alpha})`
+    ];
+    return colors[index % colors.length];
 }
 
 // Display detailed analysis section
 function displayDetailedAnalysis(data) {
-    const detailedAnalysisContainer = document.getElementById('detailedAnalysis');
-    detailedAnalysisContainer.innerHTML = '';
-    
-    const managerAnalytics = data.manager_analytics;
-    const users = data.users;
-    
-    users.forEach(user => {
-        const userAnalytics = managerAnalytics[user.user_id];
-        if (!userAnalytics) return;
+    try {
+        console.log('Displaying detailed analysis');
+        const managerTrendlinesContainer = document.getElementById('managerTrendlines');
+        if (!managerTrendlinesContainer) {
+            console.error('managerTrendlines container not found');
+            return;
+        }
         
-        const seasonAnalysis = userAnalytics.season_analysis;
-        const analysisSection = createDetailedAnalysisSection(user, seasonAnalysis);
-        detailedAnalysisContainer.appendChild(analysisSection);
-    });
+        managerTrendlinesContainer.innerHTML = '';
+        
+        const managerAnalytics = data.manager_analytics;
+        const users = data.users;
+        
+        console.log('Manager analytics:', managerAnalytics);
+        console.log('Users:', users);
+        
+        users.forEach((user, index) => {
+            const userAnalytics = managerAnalytics[user.user_id];
+            if (!userAnalytics) {
+                console.log('No analytics for user:', user.user_id);
+                return;
+            }
+            
+            const seasonAnalysis = userAnalytics.season_analysis;
+            const managerSection = createManagerTrendlineSection(user, seasonAnalysis, index);
+            managerTrendlinesContainer.appendChild(managerSection);
+        });
+        
+    } catch (error) {
+        console.error('Error in displayDetailedAnalysis:', error);
+        const managerTrendlinesContainer = document.getElementById('managerTrendlines');
+        if (managerTrendlinesContainer) {
+            managerTrendlinesContainer.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        }
+    }
 }
 
-// Create detailed analysis section for a manager
-function createDetailedAnalysisSection(user, seasonAnalysis) {
+// Create individual manager trendline section
+function createManagerTrendlineSection(user, seasonAnalysis, index) {
     const section = document.createElement('div');
     section.className = 'card mb-4 fade-in';
     
@@ -281,7 +727,7 @@ function createDetailedAnalysisSection(user, seasonAnalysis) {
         <div class="card-header">
             <h5 class="mb-0">
                 <i class="fas fa-chart-line me-2"></i>
-                ${user.display_name || user.metadata?.team_name || 'Unknown Manager'} - Season Analysis
+                ${user.display_name || user.metadata?.team_name || 'Unknown Manager'} - Season Trends
             </h5>
         </div>
         <div class="card-body">
@@ -306,20 +752,150 @@ function createDetailedAnalysisSection(user, seasonAnalysis) {
                 </div>
                 <div class="col-md-3">
                     <div class="stat-card">
-                        <div class="stat-value">${seasonAnalysis.total_weeks}</div>
-                        <div class="stat-label">Weeks Played</div>
+                        <div class="stat-value">${seasonAnalysis.wins}-${seasonAnalysis.losses}</div>
+                        <div class="stat-label">Record</div>
                     </div>
                 </div>
             </div>
             
-            <h6>Weekly Performance Breakdown:</h6>
-            <div class="weekly-breakdown">
-                ${seasonAnalysis.weekly_data.map(week => createWeekAnalysisHTML(week)).join('')}
+            <div class="row">
+                <div class="col-md-6">
+                    <canvas id="managerPointsChart${index}" height="200"></canvas>
+                </div>
+                <div class="col-md-6">
+                    <canvas id="managerOptimalChart${index}" height="200"></canvas>
+                </div>
             </div>
         </div>
     `;
     
+    // Create the charts after the DOM is updated
+    setTimeout(() => {
+        createManagerPointsChart(user, seasonAnalysis, index);
+        createManagerOptimalChart(user, seasonAnalysis, index);
+    }, 100);
+    
     return section;
+}
+
+// Create individual manager points trend chart
+function createManagerPointsChart(user, seasonAnalysis, index) {
+    const ctx = document.getElementById(`managerPointsChart${index}`);
+    if (!ctx) return;
+    
+    const weeks = seasonAnalysis.weekly_data.map(w => w.week);
+    const actualPoints = seasonAnalysis.weekly_data.map(w => w.actual_points);
+    const optimalPoints = seasonAnalysis.weekly_data.map(w => w.optimal_points);
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: weeks,
+            datasets: [
+                {
+                    label: 'Actual Points',
+                    data: actualPoints,
+                    borderColor: getColor(index),
+                    backgroundColor: getColor(index, 0.1),
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Optimal Points',
+                    data: optimalPoints,
+                    borderColor: getColor(index),
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Weekly Points Performance'
+                },
+                legend: {
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Points'
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Create individual manager optimal vs actual chart
+function createManagerOptimalChart(user, seasonAnalysis, index) {
+    const ctx = document.getElementById(`managerOptimalChart${index}`);
+    if (!ctx) return;
+    
+    const weeks = seasonAnalysis.weekly_data.map(w => w.week);
+    const pointsLost = seasonAnalysis.weekly_data.map(w => w.optimal_points - w.actual_points);
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: weeks,
+            datasets: [{
+                label: 'Points Lost to Suboptimal Lineups',
+                data: pointsLost,
+                backgroundColor: pointsLost.map(points => 
+                    points <= 5 ? '#28a745' : 
+                    points <= 15 ? '#ffc107' : '#dc3545'
+                ),
+                borderColor: '#333',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Points Lost Per Week'
+                },
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Points Lost'
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
 }
 
 // Create HTML for weekly analysis
@@ -336,8 +912,8 @@ function createWeekAnalysisHTML(week) {
                     <div class="improvement-item">
                         <i class="fas fa-arrow-up improvement-gain me-2"></i>
                         Could have gained <span class="improvement-gain">+${improvement.point_gain.toFixed(1)}</span> points by starting 
-                        Player ${improvement.with.player_id} (${improvement.with.points.toFixed(1)} pts) 
-                        instead of Player ${improvement.replaced.player_id} (${improvement.replaced.points.toFixed(1)} pts)
+                        ${improvement.with.name || `Player ${improvement.with.player_id}`} (${improvement.with.points.toFixed(1)} pts) 
+                        instead of ${improvement.replaced.name || `Player ${improvement.replaced.player_id}`} (${improvement.replaced.points.toFixed(1)} pts)
                     </div>
                 `).join('')}
             </div>

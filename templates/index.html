@@ -136,9 +136,69 @@
                 </div>
             </div>
 
+            <!-- Trendline Charts Section -->
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Weekly Points Trend</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="weeklyPointsTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Weekly Optimal vs Actual Points</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="optimalVsActualChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Points Lost Per Week</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="pointsLostPerWeekChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Cumulative Win/Loss Record</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="cumulativeRecordChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Detailed Manager Analysis -->
             <div id="detailedAnalysis" class="mt-4">
-                <!-- Detailed analysis will be populated here -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4>Individual Manager Trendlines</h4>
+                            </div>
+                            <div class="card-body">
+                                <div id="managerTrendlines">
+                                    <!-- Individual manager trendline charts will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
